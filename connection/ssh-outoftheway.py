@@ -67,6 +67,10 @@ class Connection(SSH.Connection):
             self.physical_host = self._play_context.physical_host
         else:
             self.physical_host = None
+        if hasattr(self._play_context, 'container_type'):
+            self.container_type = self._play_context.container_type
+        else:
+            self.container_type = 'lxc'
 
     def set_host_overrides(self, host, hostvars=None):
         if self._container_check() or self._chroot_check():
@@ -125,6 +129,9 @@ class Connection(SSH.Connection):
         return False
 
     def _container_check(self):
+        if self.container_type != 'lxc':
+            return False
+
         if self.container_name is not None:
             SSH.display.vvv(u'container_name: "%s"' % self.container_name)
             if self.physical_host is not None:

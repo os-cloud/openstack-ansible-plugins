@@ -30,12 +30,12 @@ LINEAR = imp.load_source(
 #                   specific variables can be made available to connection
 #                   plugins.
 import ansible.playbook.play_context
-ansible.playbook.play_context.MAGIC_VARIABLE_MAPPING.update({'physical_host':
-                                                           ('physical_host',)})
-ansible.playbook.play_context.MAGIC_VARIABLE_MAPPING.update({'container_name':
-                                                           ('inventory_hostname',)})
-ansible.playbook.play_context.MAGIC_VARIABLE_MAPPING.update({'chroot_path':
-                                                           ('chroot_path',)})
+_MAGIC_VARIABLE_MAPPING = ansible.playbook.play_context.MAGIC_VARIABLE_MAPPING
+_MAGIC_VARIABLE_MAPPING.update({'physical_host': ('physical_host',)})
+_MAGIC_VARIABLE_MAPPING.update({'container_name': ('inventory_hostname',)})
+_MAGIC_VARIABLE_MAPPING.update({'chroot_path': ('chroot_path',)})
+_MAGIC_VARIABLE_MAPPING.update({'container_type': ('container_type',)})
+
 
 class StrategyModule(LINEAR.StrategyModule):
     """Notes about this strategy.
