@@ -36,6 +36,8 @@ ansible.playbook.play_context.MAGIC_VARIABLE_MAPPING.update({'container_name':
                                                            ('inventory_hostname',)})
 ansible.playbook.play_context.MAGIC_VARIABLE_MAPPING.update({'chroot_path':
                                                            ('chroot_path',)})
+ansible.playbook.play_context.MAGIC_VARIABLE_MAPPING.update({'container_type':
+                                                           ('container_type',)})
 
 class StrategyModule(LINEAR.StrategyModule):
     """Notes about this strategy.

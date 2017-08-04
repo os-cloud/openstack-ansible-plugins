@@ -35,7 +35,7 @@ if not hasattr(SSH, 'shlex_quote'):
 
 
 class Connection(SSH.Connection):
-    """Transport options for LXC containers.
+    """Transport options for containers.
 
     This transport option makes the assumption that the playbook context has
     vars within it that contain "physical_host" which is the machine running a
@@ -45,7 +45,7 @@ class Connection(SSH.Connection):
     set the attributes accordingly.
 
     This plugin operates exactly the same way as the standard SSH plugin but
-    will pad pathing or add command syntax for lxc containers when a container
+    will pad pathing or add command syntax for containers when a container
     is detected at runtime.
     """
 
@@ -67,6 +67,10 @@ class Connection(SSH.Connection):
             self.physical_host = self._play_context.physical_host
         else:
             self.physical_host = None
+        if hasattr(self._play_context, 'container_type'):
+            self.container_type = self._play_context.container_type
+        else:
+            self.container_type = 'lxc'
 
     def set_host_overrides(self, host, hostvars=None):
         if self._container_check() or self._chroot_check():
@@ -90,7 +94,20 @@ class Connection(SSH.Connection):
             # container because certain commands and services expect some
             # enviromental variables to be set properly. The best way to do
             # that would be to execute the commands in a login shell
-            lxc_command = 'lxc-attach --clear-env --name %s' % self.container_name
+            _pad = None
+            if self.container_type == 'lxc':
+                _pad = 'lxc-attach --clear-env --name %s'.format(
+                    self.container_name
+                )
+            elif self.container_type == 'nspawn':
+                SSH.display.vvv(
+                    'nspawn does not have a CLI command that we can use to'
+                    ' attach to a container and run other commands. While we'
+                    ' can use `machinectl shell` or `systemd-run -M`, these do'
+                    ' not return stdout/err and that breaks ansible.'
+                    ' See https://github.com/systemd/systemd/issues/5878'
+                    ' for more details.'
+                )
 
             # NOTE(hwoarang): the shlex_quote method is necessary here because
             # we need to properly quote the cmd as it's being passed as argument
@@ -102,8 +119,12 @@ class Connection(SSH.Connection):
             # do much since we are effectively passing a command to a command
             # to a command etc... It's somewhat ugly but maybe it can be
             # improved somehow...
-            cmd = '%s -- su - %s -c %s' % (lxc_command, container_user,
-                                           SSH.shlex_quote(cmd))
+            if _pad:
+                cmd = '%s -- su - %s -c %s' % (
+                    _pad,
+                    container_user,
+                    SSH.shlex_quote(cmd)
+                )
 
         if self._chroot_check():
             chroot_command = 'chroot %s' % self.chroot_path
@@ -137,32 +158,39 @@ class Connection(SSH.Connection):
         return False
 
     def _container_path_pad(self, path, fake_path=False):
-        args = (
-            'ssh',
-            self.host,
-            u"lxc-info --name %s --pid | awk '/PID:/ {print $2}'"
-            % self.container_name
-        )
-        returncode, stdout, _ = self._run(
-            self._build_command(*args),
-            in_data=None,
-            sudoable=False
-        )
-        if returncode == 0:
-            pad = os.path.join(
-                '/proc/%s/root' % SSH.to_text(stdout.strip()),
+        _pad = None
+        if self.container_type == 'nspawn':
+            return os.path.join(
+                '/var/lib/machines/%s' % self.container_name,
                 path.lstrip(os.sep)
             )
-            SSH.display.vvv(
-                u'The path has been padded with the following to support a'
-                u' container rootfs: [ %s ]' % pad
+        elif self.container_type == 'lxc':
+            args = (
+                'ssh',
+                self.host,
+                u"lxc-info --name %s --pid | awk '/PID:/ {print $2}'"
+                % self.container_name
             )
-            return pad
-        else:
-            raise SSH.AnsibleError(
-                u'No valid container info was found for container "%s" Please'
-                u' check the state of the container.' % self.container_name
+            returncode, stdout, _ = self._run(
+                self._build_command(*args),
+                in_data=None,
+                sudoable=False
             )
+            if returncode == 0:
+                pad = os.path.join(
+                    '/proc/%s/root' % SSH.to_text(stdout.strip()),
+                    path.lstrip(os.sep)
+                )
+                SSH.display.vvv(
+                    u'The path has been padded with the following to support a'
+                    u' container rootfs: [ %s ]' % pad
+                )
+                return pad
+            else:
+                raise SSH.AnsibleError(
+                    u'No valid container info was found for container "%s" Please'
+                    u' check the state of the container.' % self.container_name
+                )
 
     def fetch_file(self, in_path, out_path):
         """fetch a file from remote to local."""
